@@ -127,7 +127,7 @@ def ask_rag(question: str, gemini_api_key: str, top_k: int = 5) -> Dict[str, Any
     # Gemini answer
     client = genai.Client(api_key=gemini_api_key)
     response = client.models.generate_content(
-        model="gemini-1.5-flash",
+        model="gemini-2.5-flash",
         contents=prompt,
     )
 
