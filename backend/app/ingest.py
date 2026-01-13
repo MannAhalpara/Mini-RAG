@@ -1,18 +1,35 @@
+import os
 import uuid
 from typing import Dict, Any
 
-from fastembed import TextEmbedding
 from qdrant_client.http import models as qmodels
+from google import genai
 
 from .qdrant_db import get_qdrant_client
 from .vector_store import ensure_collection
 from .config import QDRANT_COLLECTION
 from .utils import simple_chunk_text
 
-# Free embedding model (FastEmbed)
-EMBED_MODEL_NAME = "BAAI/bge-small-en-v1.5"
+# Gemini embedding model (cloud)
+EMBED_MODEL = "text-embedding-004"
 
-embedder = TextEmbedding(model_name=EMBED_MODEL_NAME)
+
+def embed_texts(texts):
+    api_key = os.getenv("GEMINI_API_KEY", "")
+    if not api_key:
+        raise ValueError("GEMINI_API_KEY missing in environment")
+
+    client = genai.Client(api_key=api_key)
+
+    vectors = []
+    for t in texts:
+        res = client.models.embed_content(
+            model=EMBED_MODEL,
+            contents=t
+        )
+        vectors.append(res.embeddings[0].values)
+
+    return vectors
 
 
 def ingest_text(title: str, text: str) -> Dict[str, Any]:
@@ -24,7 +41,7 @@ def ingest_text(title: str, text: str) -> Dict[str, Any]:
     if not chunks:
         return {"inserted": 0, "message": "No text provided"}
 
-    vectors = list(embedder.embed(chunks))  # returns list of vectors
+    vectors = embed_texts(chunks)
 
     points = []
     for i, (chunk, vector) in enumerate(zip(chunks, vectors)):

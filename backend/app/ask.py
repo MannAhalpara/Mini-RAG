@@ -1,15 +1,14 @@
+import os
 import time
 from typing import Dict, Any, List, Tuple
 
-from fastembed import TextEmbedding
-import google.generativeai as genai
+from google import genai
 
 from .config import QDRANT_COLLECTION
 from .qdrant_db import get_qdrant_client
 
-# Free embedding model (FastEmbed)
-EMBED_MODEL_NAME = "BAAI/bge-small-en-v1.5"
-embedder = TextEmbedding(model_name=EMBED_MODEL_NAME)
+
+EMBED_MODEL = "text-embedding-004"
 
 
 def cosine_similarity(a, b) -> float:
@@ -21,13 +20,18 @@ def cosine_similarity(a, b) -> float:
     return dot / (norm_a * norm_b)
 
 
-def build_prompt(question: str, contexts: List[str]) -> str:
-    """
-    contexts are already reranked + filtered.
-    We will label them as [1], [2], [3] so Gemini can cite properly.
-    """
-    context_block = "\n\n".join([f"[{i+1}] {c}" for i, c in enumerate(contexts)])
+def embed_text(text: str) -> List[float]:
+    api_key = os.getenv("GEMINI_API_KEY", "")
+    if not api_key:
+        raise ValueError("GEMINI_API_KEY missing in environment")
 
+    client = genai.Client(api_key=api_key)
+    res = client.models.embed_content(model=EMBED_MODEL, contents=text)
+    return res.embeddings[0].values
+
+
+def build_prompt(question: str, contexts: List[str]) -> str:
+    context_block = "\n\n".join([f"[{i+1}] {c}" for i, c in enumerate(contexts)])
     return f"""
 You are a helpful assistant.
 Answer the user question ONLY using the context below.
@@ -47,56 +51,45 @@ RULES:
 
 
 def ask_rag(question: str, gemini_api_key: str, top_k: int = 5) -> Dict[str, Any]:
-    """
-    Pipeline:
-    1) Embed user query
-    2) Retrieve top_k from Qdrant
-    3) Free reranker: cosine(query_emb, chunk_emb)
-    4) Filter by MIN_SCORE
-    5) LLM answer + citations
-    """
     t0 = time.time()
-    client = get_qdrant_client()
 
-    # ✅ Query embedding
-    query_vector = list(embedder.embed([question]))[0]
+    # Query embedding (Gemini)
+    query_vector = embed_text(question)
 
-    # ✅ Retrieve from Qdrant
-    result = client.query_points(
+    # Retrieve from Qdrant
+    qdrant = get_qdrant_client()
+
+    result = qdrant.query_points(
         collection_name=QDRANT_COLLECTION,
         query=query_vector,
         limit=top_k,
         with_payload=True,
     )
 
-    search_result = result.points  # IMPORTANT
-
-    # If nothing retrieved
-    if not search_result:
+    hits = result.points
+    if not hits:
         return {
             "answer": "I couldn't find relevant info in the provided data.",
             "sources": [],
             "latency_ms": int((time.time() - t0) * 1000),
         }
 
-    # ✅ FREE reranker scoring (cosine with query)
+    # Free reranker (cosine similarity between query embedding and chunk embedding)
     reranked: List[Tuple[float, Any]] = []
-    for hit in search_result:
+    for hit in hits:
         payload = hit.payload or {}
         chunk_text = payload.get("text", "")
         if not chunk_text:
             continue
 
-        chunk_vec = list(embedder.embed([chunk_text]))[0]
+        chunk_vec = embed_text(chunk_text)
         score2 = cosine_similarity(query_vector, chunk_vec)
         reranked.append((score2, hit))
 
-    # sort high -> low
     reranked.sort(key=lambda x: x[0], reverse=True)
 
-    # ✅ Threshold to remove irrelevant sources
+    # Filter out irrelevant sources
     MIN_SCORE = 0.65
-
     final_hits = []
     for score2, hit in reranked:
         if score2 >= MIN_SCORE:
@@ -104,7 +97,6 @@ def ask_rag(question: str, gemini_api_key: str, top_k: int = 5) -> Dict[str, Any
         if len(final_hits) == 3:
             break
 
-    # If nothing passed threshold
     if not final_hits:
         return {
             "answer": "I couldn't find relevant info in the provided data.",
@@ -112,19 +104,16 @@ def ask_rag(question: str, gemini_api_key: str, top_k: int = 5) -> Dict[str, Any
             "latency_ms": int((time.time() - t0) * 1000),
         }
 
-    # ✅ Build contexts + sources (aligned indexing for citations)
-    contexts: List[str] = []
-    sources: List[Dict[str, Any]] = []
-
+    contexts = []
+    sources = []
     for idx, (score2, hit) in enumerate(final_hits):
         payload = hit.payload or {}
         chunk_text = payload.get("text", "")
-
         contexts.append(chunk_text)
 
         sources.append(
             {
-                "ref": idx + 1,  # this matches citation numbers [1], [2], [3]
+                "ref": idx + 1,
                 "id": str(hit.id),
                 "title": payload.get("title", "User Document"),
                 "chunk_index": payload.get("chunk_index", idx),
@@ -133,13 +122,14 @@ def ask_rag(question: str, gemini_api_key: str, top_k: int = 5) -> Dict[str, Any
             }
         )
 
-    # ✅ Prompt for Gemini
     prompt = build_prompt(question, contexts)
 
-    # ✅ Gemini call
-    genai.configure(api_key=gemini_api_key)
-    model = genai.GenerativeModel("gemini-2.5-flash")
-    response = model.generate_content(prompt)
+    # Gemini answer
+    client = genai.Client(api_key=gemini_api_key)
+    response = client.models.generate_content(
+        model="gemini-1.5-flash",
+        contents=prompt,
+    )
 
     answer = response.text if response and response.text else "No answer generated."
 

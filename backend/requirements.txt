@@ -2,9 +2,6 @@ fastapi
 uvicorn[standard]
 python-dotenv
 qdrant-client
-fastembed
-pydantic
-groq
 python-multipart
 pypdf
-google.generativeai
+google-genai
