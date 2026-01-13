@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Mini RAG Playground</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <div class="bgGlow"></div>
+
+  <div class="container">
+
+    <header class="header">
+      <div class="brand">
+        <div class="logo">R</div>
+        <div>
+          <h1>Mini RAG Playground</h1>
+          <p>FastAPI • Qdrant • FastEmbed • Gemini • Citations</p>
+        </div>
+      </div>
+
+      <div class="headerActions">
+        <button id="resetBtn" class="btn ghost">Reset DB</button>
+        <span id="topStatus" class="topStatus">Ready ✅</span>
+      </div>
+    </header>
+
+    <main class="grid">
+
+      <!-- LEFT PANEL -->
+      <section class="card">
+        <div class="cardTitle">
+          <span class="pill">Step 1</span>
+          <h2>Ingest Knowledge</h2>
+        </div>
+
+        <div class="tabs">
+          <button id="tabPaste" class="tab active">Paste Text</button>
+          <button id="tabUpload" class="tab">Upload File</button>
+        </div>
+
+        <!-- Paste -->
+        <div id="panelPaste" class="panel">
+          <label>Document Title</label>
+          <input id="title" type="text" placeholder="e.g., Leave Policy" value="User Notes" />
+
+          <label>Paste Text</label>
+          <textarea id="docText" placeholder="Paste your text here..."></textarea>
+
+          <div class="row">
+            <button id="ingestBtn" class="btn primary">Ingest Text</button>
+            <span id="ingestStatus" class="status">—</span>
+          </div>
+
+          <div class="metaRow">
+            <span class="badge">Chunking: 1200 chars</span>
+            <span class="badge">Overlap: 150 chars</span>
+            <span class="badge">Vector: bge-small-en</span>
+          </div>
+        </div>
+
+        <!-- Upload -->
+        <div id="panelUpload" class="panel hidden">
+          <label>Document Title</label>
+          <input id="uploadTitle" type="text" placeholder="e.g., HR Policy PDF" value="Uploaded Document" />
+
+          <label>Select File (.pdf / .txt)</label>
+          <input id="fileInput" type="file" accept=".pdf,.txt" />
+
+          <div class="row">
+            <button id="uploadBtn" class="btn primary">Upload & Ingest</button>
+            <span id="uploadStatus" class="status">—</span>
+          </div>
+
+          <div class="hint">
+            Tip: Larger documents create more chunks automatically ✅
+          </div>
+        </div>
+
+      </section>
+
+      <!-- RIGHT PANEL -->
+      <section class="card">
+        <div class="cardTitle">
+          <span class="pill">Step 2</span>
+          <h2>Ask Question</h2>
+        </div>
+
+        <label>Your Question</label>
+        <input id="question" type="text" placeholder="Ask something from the ingested data..." />
+
+        <div class="row">
+          <button id="askBtn" class="btn primary">Ask</button>
+          <span id="askStatus" class="status">—</span>
+        </div>
+
+        <div class="answerCard">
+          <div class="answerHeader">
+            <h3>Answer</h3>
+            <div class="kpis">
+              <span id="latency" class="kpi">Latency: —</span>
+              <span id="sourcesCount" class="kpi">Sources: —</span>
+            </div>
+          </div>
+
+          <div id="answer" class="answerText">Your answer will appear here…</div>
+
+          <div class="sourcesHeader">
+            <h3>Sources</h3>
+            <p>Each citation like <b>[1]</b> maps to a chunk below.</p>
+          </div>
+
+          <div id="sources" class="sources"></div>
+        </div>
+
+      </section>
+
+    </main>
+
+    <footer class="footer">
+      <span>Built for assessment demo • Minimal UI + production-minded logic ✅</span>
+    </footer>
+
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
