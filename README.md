@@ -22,16 +22,7 @@ A streamlined Retrieval-Augmented Generation (RAG) application that allows users
 ### Production-Ready Design
 * **Fully Hosted:** Decoupled frontend (Vercel) and backend (Render).
 * **Security:** API keys and secrets managed strictly via server-side environment variables.
-* **Testing Utilities:** Built-in endpoints for collection initialization (/init), stats (/stats), and testing resets (/reset).
-
----
-
-## Architecture
-
-The system follows a modular flow:
-1. **Frontend:** Static UI communicating via REST API.
-2. **Backend:** FastAPI handles orchestration, document processing, and LLM prompting.
-3. **Data Tier:** Qdrant Cloud stores high-dimensional vectors and associated metadata.
+* **Testing Utilities:** Built-in endpoints for collection management and status monitoring.
 
 ---
 
@@ -60,11 +51,22 @@ The system follows a modular flow:
 | **Metric** | Cosine Similarity |
 | **Embedding Model** | Gemini text-embedding-004 |
 | **Dimensions** | 768 |
+| **Chunk Size** | 1200 characters |
+| **Overlap** | 150 characters |
 
-**Chunking Strategy:**
-* **Method:** Character-based
-* **Size:** 1200 characters
-* **Overlap:** 150 characters (to maintain context across boundaries)
+---
+
+## API Reference
+
+| Method | Endpoint | Description |
+| :--- | :--- | :--- |
+| **GET** | `/health` | Returns API status. |
+| **POST** | `/ingest` | Ingests raw text provided in JSON body. |
+| **POST** | `/upload` | Ingests .pdf or .txt files via form-data. |
+| **POST** | `/ask` | Queries the RAG pipeline for an answer. |
+| **POST** | `/init` | Ensures the Qdrant collection is created. |
+| **POST** | `/reset` | Deletes and recreates the collection (Testing only). |
+| **GET** | `/stats` | Returns point counts and collection metadata. |
 
 ---
 
@@ -73,7 +75,7 @@ The system follows a modular flow:
 ### Backend
 1. Navigate to the backend directory: `cd backend`
 2. Install dependencies: `pip install -r requirements.txt`
-3. Create a .env file based on .env.example.
+3. Create a `.env` file with `QDRANT_URL`, `QDRANT_API_KEY`, and `GEMINI_API_KEY`.
 4. Run the server: `uvicorn app.main:app --reload`
 
 ### Frontend
@@ -83,7 +85,7 @@ Simply open `frontend/index.html` in any modern web browser.
 
 ## Known Limitations
 * **File Support:** Limited to .txt and .pdf only.
-* **Chunking:** Currently uses character-based logic; token-based chunking is a future improvement for better context window optimization.
+* **Chunking:** Currently uses character-based logic; token-based chunking is a planned improvement.
 * **Reranker:** Uses a lightweight similarity check; integration with professional API rerankers (like Cohere or Jina) would further improve accuracy.
 
 ---
