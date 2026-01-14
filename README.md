@@ -1,243 +1,95 @@
 # Mini RAG Playground (Track B)
-**FastAPI + Qdrant + Gemini + Citations + File Upload**
+### **FastAPI + Qdrant + Gemini + Citations + File Upload**
 
-A small Retrieval-Augmented Generation (RAG) application that lets users paste text or upload files, stores chunk embeddings in a cloud-hosted vector database, retrieves the most relevant chunks for a question, applies a lightweight reranking step, and generates a grounded answer with inline citations.
+A streamlined Retrieval-Augmented Generation (RAG) application that allows users to ingest text or upload documents, store chunk embeddings in a cloud-hosted vector database, and generate grounded answers with inline citations using a lightweight reranking step.
 
 ---
 
-## Live URL:
+## Live Links
 - **Frontend (Vercel):** https://minirag-three.vercel.app/
 - **Backend (Render):** https://mini-rag-backendd.onrender.com
 
 ---
 
-## Key Features 
-### RAG Pipeline
-- Ingest text(paste) or upload a document (**.txt / .pdf**)
-- Chunking + metadata storage
-- Vector search in **Qdrant Cloud**
-- Reranking using free similarity scoring
-- Answer generation using **Gemini** with **inline citations** like `[1]`
+## Key Features
 
-### Production-minded Setup
-- Hosted backend + frontend
-- Secrets stored server-side only
-- Clean API design and reponses
-- Helpful "no-answer" handling
-- Easy reset endpoint for testing
+### RAG Pipeline
+* **Multi-Source Ingestion:** Support for raw text pasting and file uploads (.txt / .pdf).
+* **Vector Search:** Efficient retrieval using Qdrant Cloud.
+* **Two-Step Retrieval:** Initial vector search followed by a similarity-based reranking step for higher precision.
+* **Grounded Generation:** Answers powered by Gemini 1.5 Flash with inline citations (e.g., [1]) mapped to original source chunks.
+
+### Production-Ready Design
+* **Fully Hosted:** Decoupled frontend (Vercel) and backend (Render).
+* **Security:** API keys and secrets managed strictly via server-side environment variables.
+* **Testing Utilities:** Built-in endpoints for collection initialization (/init), stats (/stats), and testing resets (/reset).
 
 ---
 
 ## Architecture
-      ┌───────────────────────────────┐
-      │           Frontend            │
-      │     (Vercel / Static UI)      │
-      └───────────────┬───────────────┘
-                      │  REST API Calls
-                      ▼
-      ┌───────────────────────────────┐
-      │            Backend             │
-      │           FastAPI              │
-      │  /ingest  /upload  /ask        │
-      └───────────────┬───────────────┘
-                      │
-      ┌───────────────┼─────────────────────────┐
-      ▼               ▼                         ▼
-┌──────────────┐ ┌──────────────┐ ┌─────────────────┐
-│ Chunking │ │ Embeddings │ │ Answering (LLM) │
-│ + Metadata │ │ Gemini Embed │ │ Gemini 1.5 Flash│
-└───────┬──────┘ └───────┬──────┘ └────────┬────────┘
-│ │ │
-▼ ▼ ▼
-┌────────────────────────────────────────────────────┐
-│ Qdrant Vector DB (Cloud) │
-│ Stores vectors + payload(metadata + chunk text) │
-└────────────────────────────────────────────────────┘
+
+The system follows a modular flow:
+1. **Frontend:** Static UI communicating via REST API.
+2. **Backend:** FastAPI handles orchestration, document processing, and LLM prompting.
+3. **Data Tier:** Qdrant Cloud stores high-dimensional vectors and associated metadata.
 
 ---
 
-## How It Works (Flow)
+## Technical Workflow
 
-### 1) Ingestion
-**Paste text** OR **upload .txt/.pdf**  
-→ Extract text (for PDF)  
-→ Chunk it  
-→ Embed each chunk  
-→ Store `(vector + metadata + chunk text)` in Qdrant
+### 1. Ingestion and Indexing
+* **Processing:** PDF/Text extraction followed by character-based chunking.
+* **Embedding:** Each chunk is converted into a 768-dimensional vector using Gemini text-embedding-004.
+* **Storage:** Vectors are upserted to Qdrant with a payload containing the title, text, chunk_index, and source.
 
-### 2) Retrieval + Reranking
-User asks a question  
-→ Embed question  
-→ Retrieve top-k vectors from Qdrant  
-→ Rerank retrieved chunks using a free similarity check  
-→ Filter irrelevant results using a small threshold + fallback logic
+### 2. Retrieval and Reranking
+* **Retrieval:** The user's query is embedded, and the top 5 most similar candidates are fetched from Qdrant.
+* **Reranking:** A secondary cosine similarity check is performed to select the top 3 most relevant chunks, filtering out low-confidence results based on a set threshold.
 
-### 3) Answer Generation + Citations
-LLM receives:
-
-- User question
-- Retrieved contexts labeled as `[1]`, `[2]`, `[3]`
-
-LLM returns grounded answer with citations like:
-
-> "Employees receive 18 days of annual leave per year [1]."
-
-Below, sources are displayed corresponding to the same citation indices.
+### 3. Generation
+* The LLM receives the question and the context chunks (labeled [1], [2], etc.).
+* The model generates a response strictly grounded in the provided context, including citations to maintain transparency and reduce hallucinations.
 
 ---
 
 ## Vector DB Configuration (Qdrant)
 
-- **Provider:** Qdrant Cloud (Free Tier)
-- **Collection name:** `mini_rag_docs`
-- **Distance metric:** Cosine similarity
-- **Embedding model:** Gemini `text-embedding-004`
-- **Embedding dimension:** `768`
+| Property | Value |
+| :--- | :--- |
+| **Provider** | Qdrant Cloud (Free Tier) |
+| **Metric** | Cosine Similarity |
+| **Embedding Model** | Gemini text-embedding-004 |
+| **Dimensions** | 768 |
 
-### Upsert Strategy
-Each chunk is upserted as an independent point with:
-- auto-generated UUID as point ID
-- payload includes:
-  - `title`
-  - `chunk_index`
-  - `text`
-  - `source`
-
+**Chunking Strategy:**
+* **Method:** Character-based
+* **Size:** 1200 characters
+* **Overlap:** 150 characters (to maintain context across boundaries)
 
 ---
-
-## Chunking Strategy
-
-**Chunking method:** simple character-based chunking  
-- `chunk_size_chars`: **1200**
-- `overlap_chars`: **150**
-
-✅ Metadata stored per chunk:
-- `title`
-- `chunk_index`
-- `source`
-
-**Reasoning:**  
-Chunk overlap prevents losing context at boundaries and improves retrieval quality.
-
----
-
-## Retriever + Reranker Setup
-
-### Retriever
-- Vector search from Qdrant using question embedding
-- `top_k = 5` candidates retrieved
-
-### Reranker (Free)
-To satisfy **Retriever + Reranker**, a second scoring step is applied:
-- Query embedding vs. chunk embedding cosine similarity
-- Keep best `top_n = 3`
-- Filter with minimum score threshold + fallback
-
-This improves relevance while keeping the solution fully free.
-
----
-
-## API Endpoints
-
-### GET `/health`
-Health check.
-
-**Response**
-```json
-{"status":"ok"}```
-
-### POST `/ingest`
-Ingest pasted text.
-
-**Request**
-```json
-{
-"title": "Leave Policy",
-  "text": "...."
-}```
-
-### POST `/upload`
-Upload file and ingest (.txt, .pdf).
-
-**Form-data**
-```json
-{
-"title": "My File",
-  "file": "upload .pdf or .txt"
-}```
-
-### POST `/ask`
-Ask a question.
-
-**Request**
-```json
-{
-"question": "How many annual leave days do employees get?"
-}```
-**Response**
-```json
-{
-"answer": "Employees get 18 days of annual leave per year [1].",
-  "sources": [
-    {
-      "ref": 1,
-      "title": "Leave Policy",
-      "chunk_index": 0,
-      "rerank_score": 0.82,
-      "text": "Each full-time employee receives 18 days..."
-    }
-  ],
-  "latency_ms": 4029
-}```
-
-### POST `/reset`
-Deletes and recreates the collection (useful during testing).
-
-### POST `/init`
-Ensures the vector collection exists.
-
-### GET `/stats`
-Returns Qdrant collection stats like points_count.
-
-## Environment Variables
-
-Backend uses environment variables (kept server-side):
-
-```env
-QDRANT_URL=...
-QDRANT_API_KEY=...
-QDRANT_COLLECTION=mini_rag_docs
-GEMINI_API_KEY=...```
-.env.example is included
-.env.example is included
 
 ## Local Setup
 
 ### Backend
-```
-cd backend
-pip install -r requirements.txt
-uvicorn app.main:app --reload
-```
-
-Backend runs at:
-https://127.0.0.1:8000
+1. Navigate to the backend directory: `cd backend`
+2. Install dependencies: `pip install -r requirements.txt`
+3. Create a .env file based on .env.example.
+4. Run the server: `uvicorn app.main:app --reload`
 
 ### Frontend
-Open this file in browser:
-```
-frontend/index.html
-```
-## Known Limitations
-- File upload supports .txt and .pdf only
-- Chunking is character-based (token-based chunking can be added for higher accuracy)
-- Reranker is lightweight (API rerankers like Cohere/Jina can improve results further)
+Simply open `frontend/index.html` in any modern web browser.
 
-## Resume
-https://drive.google.com/file/d/1v2fil1I7i0_tqNGQSavIkv38i57x0OZ-/view?usp=drive_link
+---
+
+## Known Limitations
+* **File Support:** Limited to .txt and .pdf only.
+* **Chunking:** Currently uses character-based logic; token-based chunking is a future improvement for better context window optimization.
+* **Reranker:** Uses a lightweight similarity check; integration with professional API rerankers (like Cohere or Jina) would further improve accuracy.
+
+---
 
 ## Author
 **Mann Ahalpara**
-- GitHub : https://github.com/MannAhalpara
-- LinkedIn : https://www.linkedin.com/in/mannahalpara/
+* **GitHub:** https://github.com/MannAhalpara
+* **LinkedIn:** https://www.linkedin.com/in/mannahalpara/
+* **Resume:** https://drive.google.com/file/d/1v2fil1I7i0_tqNGQSavIkv38i57x0OZ-/view?usp=drive_link
