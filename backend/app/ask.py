@@ -89,7 +89,7 @@ def ask_rag(question: str, gemini_api_key: str, top_k: int = 5) -> Dict[str, Any
     reranked.sort(key=lambda x: x[0], reverse=True)
 
     # Filter out irrelevant sources
-    MIN_SCORE = 0.65
+    MIN_SCORE = 0.55
     final_hits = []
     for score2, hit in reranked:
         if score2 >= MIN_SCORE:
@@ -97,12 +97,8 @@ def ask_rag(question: str, gemini_api_key: str, top_k: int = 5) -> Dict[str, Any
         if len(final_hits) == 3:
             break
 
-    if not final_hits:
-        return {
-            "answer": "I couldn't find relevant info in the provided data.",
-            "sources": [],
-            "latency_ms": int((time.time() - t0) * 1000),
-        }
+    if not final_hits and len(reranked) > 0:
+        final_hits = [reranked[0]]
 
     contexts = []
     sources = []
